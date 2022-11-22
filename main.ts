@@ -57,7 +57,10 @@ export default class MyPlugin extends Plugin {
         );
 
         vault.create(newFilePath, preJournalContent).then(
-          () => console.log("Journal created successfully!"),
+          (file) => {
+            console.log("Journal created successfully!")
+            app.workspace.getLeaf().openFile(file); 
+          },
           () => console.log("Failed to create journal, journal already exists!")
         );
       } else {
