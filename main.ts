@@ -7,16 +7,16 @@ dayjs.extend(weekOfYear);
 
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
+interface JournalPluginSettings {
   mySetting: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
+const DEFAULT_SETTINGS: JournalPluginSettings = {
   mySetting: "default",
 };
 
-export default class MyPlugin extends Plugin {
-  settings: MyPluginSettings;
+export default class JournalPlugin extends Plugin {
+  settings: JournalPluginSettings;
 
   async onload() {
     const app = this.app;
@@ -40,26 +40,23 @@ export default class MyPlugin extends Plugin {
         `W${week}`
       );
       const newFilePath = path.join(newFileFolderPath, `${month}-${date}.md`);
-      const preJournalPath = path.join(
-        newFileFolderPath,
-        `${month}-${+date - 1}.md`
-      );
+      const journalPathRegExp = /^(Journal)\/2[0-9]{3}\/W[0-9]{2}\/(0|1)[0-9]-(0|1|2|3)[0-9](.md)$/;
 
       const preJournalFile = vault
         .getMarkdownFiles()
-        .find((file) => `/${file.path}` === preJournalPath);
-
+        .find((file) => journalPathRegExp.test(`${file.path}`));
+      
       if (preJournalFile) {
         const preJournalContent = await vault.read(preJournalFile);
         vault.createFolder(newFileFolderPath).then(
           () => console.log("Directory created successfully!"),
-          () => console.log("Failed to create directory, directory already exists!")
+          () =>
+            console.log("Failed to create directory, directory already exists!")
         );
-
         vault.create(newFilePath, preJournalContent).then(
           (file) => {
-            console.log("Journal created successfully!")
-            app.workspace.getLeaf().openFile(file); 
+            console.log("Journal created successfully!");
+            app.workspace.getLeaf().openFile(file);
           },
           () => console.log("Failed to create journal, journal already exists!")
         );
