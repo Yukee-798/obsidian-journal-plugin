@@ -28,9 +28,9 @@ export default class JournalPlugin extends Plugin {
     // This creates an icon in the left ribbon.
     this.addRibbonIcon("dice", "Quick Journal", async (evt: MouseEvent) => {
       const year = dayjs().year().toString();
-      const month = (dayjs().month() + 1).toString();
-      const date = dayjs().date().toString();
-      const week = dayjs().week().toString();
+      const month = (dayjs().month() + 1).toString().padStart(2, "0");
+      const date = dayjs().date().toString().padStart(2, "0");
+      const week = dayjs().week().toString().padStart(2, "0");
 
       const rootPath = vault.getRoot().path;
       const newFileFolderPath = path.join(
