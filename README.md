@@ -2,7 +2,7 @@
 
 This plugin will help you quickly create a journal and copy the last journal as content.
 
-The generated journal has the following directory structure:
+The generated journals have the following directory structure:
 
 ```bash
 # your vault root directory
