@@ -39,7 +39,7 @@ Journal
 
 [Download](https://github.com/Yukee-798/obsidian-journal-plugin/releases)
 
-Move the directory to `your-vault/.obsidian/plugins` and activate the plugin in obsidian.
+Move the directory(`obsidian-journal-plugin`) to `your-vault/.obsidian/plugins` and activate the plugin in Obsidian.
 
 <img width="359" alt="image" src="https://user-images.githubusercontent.com/57055112/205478687-3434c742-f8ca-4fa1-a951-3c087141b36c.png">
 
