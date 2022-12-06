@@ -16,15 +16,24 @@ const DEFAULT_SETTINGS: JournalPluginSettings = {
 export default class JournalPlugin extends Plugin {
   settings: JournalPluginSettings;
 
-  getPreJournalFile(): TFile | undefined {
+  getLastJournalFile(): TFile | undefined {
     const journalPathRegExp =
       /^(Journal)\/2[0-9]{3}\/W[0-9]{2}\/(0|1)[0-9]-(0|1|2|3)[0-9](.md)$/;
 
-    const preJournalFile = this.app.vault
+    const lastJournalFile = this.app.vault
       .getMarkdownFiles()
       .find((file) => journalPathRegExp.test(`${file.path}`));
 
-    return preJournalFile;
+    return lastJournalFile;
+  }
+
+  isNewJournalCreated(date: string): boolean {
+    const lastJournalFile = this.getLastJournalFile();
+    if (lastJournalFile) {
+      return date === lastJournalFile.basename;
+    } else {
+      throw Error("LastJournalFile is not existed.");
+    }
   }
 
   async onload() {
@@ -45,38 +54,49 @@ export default class JournalPlugin extends Plugin {
         year,
         `W${week}`
       );
-      const newFilePath = path.join(newFileFolderPath, `${month}-${date}.md`);
-      const preJournalFile = this.getPreJournalFile();
+      const newJournalPath = path.join(
+        newFileFolderPath,
+        `${month}-${date}.md`
+      );
+      const lastJournalFile = this.getLastJournalFile();
 
-      if (preJournalFile) {
-        await this.createJournal(
-          preJournalFile,
-          newFileFolderPath,
-          newFilePath
-        );
+      if (this.isNewJournalCreated(`${month}-${date}`)) {
+        if (lastJournalFile) {
+          this.openFileInVault(lastJournalFile);
+        } else {
+          throw Error("LastJournalFile is not existed.");
+        }
       } else {
-        throw Error("Yesterday's journal does not exist!");
+        if (lastJournalFile) {
+          await this.createJournal(
+            lastJournalFile,
+            newFileFolderPath,
+            newJournalPath
+          );
+        } else {
+          throw Error("Yesterday's journal does not exist!");
+        }
       }
     });
   }
 
   async createJournal(
-    preJournalFile: TFile,
+    lastJournalFile: TFile,
     newFileFolderPath: string,
-    newFilePath: string
+    newJournalPath: string
   ) {
     const vault = this.app.vault;
 
-    const preJournalContent = await vault.read(preJournalFile);
+    const preJournalContent = await vault.read(lastJournalFile);
 
     vault.createFolder(newFileFolderPath).then(
       () => console.log("Directory created successfully!"),
       () => console.log("Failed to create directory, directory already exists!")
     );
 
-    vault.create(newFilePath, preJournalContent).then(
-      (file) => {
-        this.openFileInVault(file);
+    vault.create(newJournalPath, preJournalContent).then(
+      async (file) => {
+        await this.openFileInVault(file);
         console.log("Journal created successfully!");
       },
       () => console.log("Failed to create journal, journal already exists!")
@@ -84,7 +104,7 @@ export default class JournalPlugin extends Plugin {
   }
 
   async openFileInVault(file: TFile) {
-    this.app.workspace.getLeaf().openFile(file);
+    return this.app.workspace.getLeaf().openFile(file);
   }
 
   async onunload() {}
