@@ -2,105 +2,126 @@ import { Plugin, TFile } from "obsidian";
 import path from "path";
 import dayjs from "dayjs";
 import weekOfYear from "dayjs/plugin/weekOfYear";
+import JournalSettingTab, {
+  DEFAULT_SETTINGS,
+  JournalPluginSettings,
+} from "settings";
 
 dayjs.extend(weekOfYear);
-
-interface JournalPluginSettings {
-  mySetting: string;
-}
-
-const DEFAULT_SETTINGS: JournalPluginSettings = {
-  mySetting: "default",
-};
 
 export default class JournalPlugin extends Plugin {
   settings: JournalPluginSettings;
 
-  getLastJournalFile(): TFile | undefined {
-    const journalPathRegExp =
-      /^(Journal)\/2[0-9]{3}\/W[0-9]{2}\/(0|1)[0-9]-(0|1|2|3)[0-9](.md)$/;
+  async onload() {
+    await this.loadSettings();
 
-    const lastJournalFile = this.app.vault
-      .getMarkdownFiles()
-      .find((file) => journalPathRegExp.test(`${file.path}`));
+    this.addRibbonIcon("dice", "Quick Journal", this.onRibbonIconClick);
+    this.addSettingTab(new JournalSettingTab(app, this));
+  }
+
+  onRibbonIconClick = async (evt: MouseEvent) => {
+    const vault = this.app.vault;
+
+    const year = dayjs().year().toString();
+    const month = (dayjs().month() + 1).toString().padStart(2, "0");
+    const date = dayjs().date().toString().padStart(2, "0");
+    const week = dayjs().week().toString().padStart(2, "0");
+
+    const journalRootPath = this.settings.journalRootPath;
+
+    const newJournalPath = path.join(
+      journalRootPath,
+      year,
+      `W${week}`,
+      `${month}-${date}.md`
+    );
+
+    const lastJournalFile = this.getLastJournalFile();
+
+    if (lastJournalFile) {
+      const isNewJournalCreated =
+        lastJournalFile.basename === `${month}-${date}`;
+      if (isNewJournalCreated) {
+        await this.openFileInVault(lastJournalFile);
+        console.log(`"${newJournalPath}" is existed.`);
+      } else {
+        const content = await vault.read(lastJournalFile);
+        console.log(lastJournalFile);
+        const journal = await this.createJournal(newJournalPath, content);
+        await this.openFileInVault(journal);
+      }
+    } else {
+      const journal = await this.createJournal(newJournalPath);
+      await this.openFileInVault(journal);
+    }
+  };
+
+  getLastJournalFile(): TFile | undefined {
+    const journalPathRegExp = new RegExp(
+      `^(${this.settings.journalRootPath})/2[0-9]{3}/W[0-9]{2}/(0|1)[0-9]-(0|1|2|3)[0-9](.md)$`
+    );
+
+    const markdownFiles = this.app.vault.getMarkdownFiles();
+    const journalFiles = markdownFiles.filter((file) =>
+      journalPathRegExp.test(`/${file.path}`)
+    );
+
+    const journalDateNums = journalFiles.map(this.getJournalDateNum);
+    const maxDateNumber = Math.max(...journalDateNums);
+
+    const lastJournalFile = journalFiles.find(
+      (file) => this.getJournalDateNum(file) === maxDateNumber
+    );
 
     return lastJournalFile;
   }
 
-  isNewJournalCreated(date: string): boolean {
-    const lastJournalFile = this.getLastJournalFile();
-    if (lastJournalFile) {
-      return date === lastJournalFile.basename;
-    } else {
-      throw Error("LastJournalFile is not existed.");
-    }
+  getJournalDateNum(file: TFile) {
+    const year = file.path.split("/").at(-3)!;
+    const month = file.basename.split("-")[0];
+    const date = file.basename.split("-")[1];
+    const dateNumber = +`${year}${month}${date}`;
+    return dateNumber;
   }
 
-  async onload() {
-    await this.loadSettings();
-
+  async createJournal(_path: string, content: string = ""): Promise<TFile> {
     const vault = this.app.vault;
 
-    this.addRibbonIcon("dice", "Quick Journal", async (evt: MouseEvent) => {
-      const year = dayjs().year().toString();
-      const month = (dayjs().month() + 1).toString().padStart(2, "0");
-      const date = dayjs().date().toString().padStart(2, "0");
-      const week = dayjs().week().toString().padStart(2, "0");
+    const pathObj = path.parse(_path);
 
-      const rootPath = vault.getRoot().path;
-      const newFileFolderPath = path.join(
-        rootPath,
-        "Journal",
-        year,
-        `W${week}`
-      );
-      const newJournalPath = path.join(
-        newFileFolderPath,
-        `${month}-${date}.md`
-      );
-      const lastJournalFile = this.getLastJournalFile();
+    const folders = this.getAncestorPaths(pathObj.dir);
 
-      if (this.isNewJournalCreated(`${month}-${date}`)) {
-        if (lastJournalFile) {
-          this.openFileInVault(lastJournalFile);
-        } else {
-          throw Error("LastJournalFile is not existed.");
-        }
-      } else {
-        if (lastJournalFile) {
-          await this.createJournal(
-            lastJournalFile,
-            newFileFolderPath,
-            newJournalPath
-          );
-        } else {
-          throw Error("Yesterday's journal does not exist!");
-        }
+    folders.forEach(async (folderPath) => {
+      try {
+        await vault.createFolder(folderPath);
+      } catch {
+        console.log(`"${folderPath}" is existed.`);
       }
     });
+
+    return vault.create(_path, content);
   }
 
-  async createJournal(
-    lastJournalFile: TFile,
-    newFileFolderPath: string,
-    newJournalPath: string
-  ) {
-    const vault = this.app.vault;
+  /*
+    e.g. getAncestorPaths('/root/folder1/folder2')
+    [
+      '/root',
+      '/root/folder1',
+      '/root/folder1/folder2',
+    ] 
+  */
+  getAncestorPaths(curPath: string): string[] {
+    const folderBaseNames = curPath.split("/").slice(1);
+    const folders = [`/${folderBaseNames[0]}`];
 
-    const preJournalContent = await vault.read(lastJournalFile);
+    folderBaseNames.forEach((basename, i) => {
+      if (i === 0) return;
+      const preFolderPath = folders.at(-1)!;
+      const curFolderPath = path.join(preFolderPath, basename);
+      folders.push(curFolderPath);
+    });
 
-    vault.createFolder(newFileFolderPath).then(
-      () => console.log("Directory created successfully!"),
-      () => console.log("Failed to create directory, directory already exists!")
-    );
-
-    vault.create(newJournalPath, preJournalContent).then(
-      async (file) => {
-        await this.openFileInVault(file);
-        console.log("Journal created successfully!");
-      },
-      () => console.log("Failed to create journal, journal already exists!")
-    );
+    return folders;
   }
 
   async openFileInVault(file: TFile) {
